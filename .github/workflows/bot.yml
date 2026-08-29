@@ -1,0 +1,54 @@
+name: Manhwa Splitter Bot
+
+# Runs the Telegram bot continuously. GitHub Actions caps a single job at
+# 6 hours (360 minutes), so we run in ~5h50m sessions and auto-relaunch a
+# fresh run right before the limit via workflow_dispatch chaining, plus you
+# can always start one manually.
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Safety-net trigger: attempts a (re)start every 6 hours in case the
+    # previous run expired. If a run is already active, remove/ignore this
+    # trigger — GitHub Actions does not queue-skip automatically, so avoid
+    # overlapping duplicate bot instances polling the same BOT_TOKEN.
+    - cron: "0 */6 * * *"
+
+concurrency:
+  group: manhwa-splitter-bot
+  cancel-in-progress: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # stay safely under the 360-minute hard cap
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies (OpenCV + PDF + media)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            poppler-utils \
+            ffmpeg \
+            libgl1 \
+            libglib2.0-0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Telegram bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+        run: |
+          python bot.py
